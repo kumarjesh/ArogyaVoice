@@ -1,5 +1,11 @@
-const CACHE_NAME = 'arogyavoice-v1';
-const APP_SHELL = ['/', '/manifest.json', '/icon.svg'];
+const CACHE_NAME = 'arogyavoice-v2';
+const APP_SHELL = [
+  '/',
+  '/manifest.json',
+  '/pwa-192x192.png',
+  '/pwa-512x512.png',
+  '/maskable-icon-512x512.png'
+];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(

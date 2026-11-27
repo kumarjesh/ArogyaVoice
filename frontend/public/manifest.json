@@ -1,18 +1,32 @@
 {
-  "name": "ArogyaVoice Medication Care",
+  "id": "/",
+  "name": "ArogyaVoice Health Companion",
   "short_name": "ArogyaVoice",
   "description": "Voice-first medication reminder, double-dose prevention & family calling for elders and caregivers.",
-  "start_url": "/",
+  "start_url": "/?view=elder",
+  "scope": "/",
   "display": "standalone",
-  "background_color": "#f8fafc",
+  "background_color": "#ffffff",
   "theme_color": "#0f766e",
   "orientation": "portrait",
   "icons": [
     {
-      "src": "/icon.svg",
-      "sizes": "any",
-      "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "src": "/pwa-192x192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/pwa-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/maskable-icon-512x512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
