@@ -1,0 +1,25 @@
+# Secrets & credentials
+.env
+backend/.env
+frontend/.env
+firebase-service-account.json
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!manifest.json
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Node / React
+node_modules/
+frontend/dist/
+
+# Temp audio files
+audio_cache/
+*.wav
+*.mp3
