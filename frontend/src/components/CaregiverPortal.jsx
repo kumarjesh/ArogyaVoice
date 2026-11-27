@@ -14,6 +14,7 @@ import {
   ShieldAlert,
   Volume2,
   ExternalLink,
+  Pencil,
 } from "lucide-react";
 import {
   db,
@@ -30,6 +31,7 @@ import {
   updateElder,
   listMedications,
   addMedication,
+  updateMedication,
   deleteMedication,
   getDoseLogs,
   listSpeedDials,
@@ -55,6 +57,8 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
   // Modals & form states
   const [showAddElder, setShowAddElder] = useState(false);
   const [showAddMed, setShowAddMed] = useState(false);
+  const [editingMed, setEditingMed] = useState(null);
+  const [customizingScannedMed, setCustomizingScannedMed] = useState(null);
   const [showAddSpeedDial, setShowAddSpeedDial] = useState(false);
   const [showAlertsDrawer, setShowAlertsDrawer] = useState(false);
   const [isTriggeringCall, setIsTriggeringCall] = useState(false);
@@ -265,24 +269,17 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
     }
   }
 
-  // Quick add from scan result
-  async function handleAddScannedMed(scanned) {
-    if (!selectedElder?.id) return;
-    try {
-      await addMedication(selectedElder.id, {
-        medicine_name: scanned.medicine_name,
-        time: "08:00",
-        meal_timing: "after_food",
-        tablet_count: 1,
-        color: scanned.color || "white",
-        shape: scanned.shape || "round",
-        is_active: true,
-      });
-      loadElderData(selectedElder);
-      alert(`Added "${scanned.medicine_name}" to schedule!`);
-    } catch (err) {
-      alert("Failed adding medicine: " + err.message);
-    }
+  // Open customize modal from scan result
+  function handleStartAddScannedMed(scanned) {
+    setCustomizingScannedMed({
+      medicine_name: scanned.medicine_name || "",
+      dosage: scanned.dosage || "",
+      time: "08:00",
+      meal_timing: "after_food",
+      tablet_count: 1,
+      color: scanned.color || "white",
+      shape: scanned.shape || "round",
+    });
   }
 
   const unreadAlerts = alerts.filter((a) => !a.is_read);
@@ -694,15 +691,28 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
                     <button
                       onClick={() => handleTriggerCall(med.id)}
                       className="text-xs text-teal-700 hover:text-teal-900 font-semibold flex items-center gap-1"
+                      title="Trigger Call Now"
                     >
-                      <PhoneCall className="w-3 h-3" /> Call this dose
+                      <PhoneCall className="w-3 h-3" /> Call dose
                     </button>
-                    <button
-                      onClick={() => deleteMedication(selectedElder.id, med.id).then(() => loadElderData(selectedElder))}
-                      className="text-slate-400 hover:text-red-600"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => setEditingMed(med)}
+                        className="text-xs text-slate-700 hover:text-teal-700 font-semibold flex items-center gap-1 px-2 py-1 rounded bg-slate-100 hover:bg-teal-50"
+                        title="Edit Medication"
+                      >
+                        <Pencil className="w-3 h-3" /> Edit
+                      </button>
+
+                      <button
+                        onClick={() => deleteMedication(selectedElder.id, med.id).then(() => loadElderData(selectedElder))}
+                        className="text-slate-400 hover:text-red-600 p-1"
+                        title="Delete Medication"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -790,10 +800,10 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
                       )}
 
                       <button
-                        onClick={() => handleAddScannedMed(item)}
-                        className="w-full mt-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs py-1.5 rounded-lg flex items-center justify-center gap-1.5"
+                        onClick={() => handleStartAddScannedMed(item)}
+                        className="w-full mt-2 bg-teal-700 hover:bg-teal-800 text-white font-semibold text-xs py-2 rounded-lg flex items-center justify-center gap-1.5 transition-all shadow-xs"
                       >
-                        <Plus className="w-3.5 h-3.5" /> Add to Schedule
+                        <Plus className="w-3.5 h-3.5" /> Customize & Add to Schedule
                       </button>
                     </div>
                   ))}
@@ -1151,6 +1161,307 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
                   type="button"
                   onClick={() => setShowAddMed(false)}
                   className="px-4 bg-slate-100 text-slate-700 font-bold py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── CUSTOMIZE & ADD SCANNED MEDICATION MODAL ── */}
+      {customizingScannedMed && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Schedule Scanned Medication</h3>
+                <p className="text-xs text-slate-500">Customize dose count, timings, color & food timing</p>
+              </div>
+              <button
+                onClick={() => setCustomizingScannedMed(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const newMed = {
+                  medicine_name: formData.get("name"),
+                  time: formData.get("time"),
+                  meal_timing: formData.get("meal_timing"),
+                  tablet_count: parseInt(formData.get("tablet_count") || "1"),
+                  color: formData.get("color") || "white",
+                  shape: formData.get("shape") || "round",
+                  tactile_slot: formData.get("tactile_slot") || "",
+                  tonic_name: formData.get("tonic_name") || "",
+                  is_active: true,
+                };
+                await addMedication(selectedElder.id, newMed);
+                setCustomizingScannedMed(null);
+                loadElderData(selectedElder);
+                alert(`Added "${newMed.medicine_name}" to schedule!`);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Medicine Name & Dosage
+                </label>
+                <input
+                  name="name"
+                  required
+                  defaultValue={customizingScannedMed.medicine_name}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Scheduled Time (24h)
+                  </label>
+                  <input
+                    name="time"
+                    type="time"
+                    required
+                    defaultValue={customizingScannedMed.time || "08:00"}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Meal Timing
+                  </label>
+                  <select
+                    name="meal_timing"
+                    defaultValue={customizingScannedMed.meal_timing || "after_food"}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                  >
+                    <option value="after_food">After Food (oota maadida mele)</option>
+                    <option value="before_food">Before Food (oota munche)</option>
+                    <option value="with_food">With Food (oota jothege)</option>
+                    <option value="anytime">Anytime</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Tablet Count</label>
+                  <input
+                    name="tablet_count"
+                    type="number"
+                    min="1"
+                    max="10"
+                    defaultValue={customizingScannedMed.tablet_count || 1}
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Color</label>
+                  <input
+                    name="color"
+                    defaultValue={customizingScannedMed.color || "white"}
+                    placeholder="white, green, yellow..."
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Shape</label>
+                  <input
+                    name="shape"
+                    defaultValue={customizingScannedMed.shape || "round"}
+                    placeholder="round, oval, capsule..."
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-2 space-y-2">
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Additional Details (Optional)
+                </p>
+                <input
+                  name="tactile_slot"
+                  defaultValue={customizingScannedMed.tactile_slot || ""}
+                  placeholder="Tactile slot (e.g. morning box slot 1)"
+                  className="w-full border border-slate-300 rounded-lg p-2"
+                />
+                <input
+                  name="tonic_name"
+                  defaultValue={customizingScannedMed.tonic_name || ""}
+                  placeholder="Liquid / Tonic name (if any)"
+                  className="w-full border border-slate-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-lg transition-all"
+                >
+                  Save to Schedule
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomizingScannedMed(null)}
+                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ── EDIT SCHEDULED MEDICATION MODAL ── */}
+      {editingMed && (
+        <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-40 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-xl space-y-4">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-base text-slate-900">Edit Scheduled Medication</h3>
+                <p className="text-xs text-slate-500">Update dose timings, counts, colors & instructions</p>
+              </div>
+              <button
+                onClick={() => setEditingMed(null)}
+                className="text-slate-400 hover:text-slate-700 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const formData = new FormData(e.target);
+                const updates = {
+                  medicine_name: formData.get("name"),
+                  time: formData.get("time"),
+                  meal_timing: formData.get("meal_timing"),
+                  tablet_count: parseInt(formData.get("tablet_count") || "1"),
+                  color: formData.get("color") || "white",
+                  shape: formData.get("shape") || "round",
+                  tactile_slot: formData.get("tactile_slot") || "",
+                  tonic_name: formData.get("tonic_name") || "",
+                };
+                await updateMedication(selectedElder.id, editingMed.id, updates);
+                setEditingMed(null);
+                loadElderData(selectedElder);
+                alert(`Updated "${updates.medicine_name}" successfully!`);
+              }}
+              className="space-y-3 text-xs"
+            >
+              <div>
+                <label className="font-semibold text-slate-700 block mb-1">
+                  Medicine Name
+                </label>
+                <input
+                  name="name"
+                  required
+                  defaultValue={editingMed.medicine_name}
+                  className="w-full border border-slate-300 rounded-lg p-2 font-medium text-slate-900"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Scheduled Time (24h)
+                  </label>
+                  <input
+                    name="time"
+                    type="time"
+                    required
+                    defaultValue={editingMed.time}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">
+                    Meal Timing
+                  </label>
+                  <select
+                    name="meal_timing"
+                    defaultValue={editingMed.meal_timing}
+                    className="w-full border border-slate-300 rounded-lg p-2 font-medium"
+                  >
+                    <option value="after_food">After Food (oota maadida mele)</option>
+                    <option value="before_food">Before Food (oota munche)</option>
+                    <option value="with_food">With Food (oota jothege)</option>
+                    <option value="anytime">Anytime</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Tablet Count</label>
+                  <input
+                    name="tablet_count"
+                    type="number"
+                    min="1"
+                    max="10"
+                    defaultValue={editingMed.tablet_count || 1}
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Color</label>
+                  <input
+                    name="color"
+                    defaultValue={editingMed.color || ""}
+                    placeholder="white, green, yellow..."
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+                <div>
+                  <label className="font-semibold text-slate-700 block mb-1">Shape</label>
+                  <input
+                    name="shape"
+                    defaultValue={editingMed.shape || ""}
+                    placeholder="round, oval, capsule..."
+                    className="w-full border border-slate-300 rounded-lg p-2"
+                  />
+                </div>
+              </div>
+
+              <div className="border-t border-slate-100 pt-2 space-y-2">
+                <p className="text-[11px] text-slate-500 font-medium">
+                  Additional Details (Optional)
+                </p>
+                <input
+                  name="tactile_slot"
+                  defaultValue={editingMed.tactile_slot || ""}
+                  placeholder="Tactile slot (e.g. slot 1)"
+                  className="w-full border border-slate-300 rounded-lg p-2"
+                />
+                <input
+                  name="tonic_name"
+                  defaultValue={editingMed.tonic_name || ""}
+                  placeholder="Tonic name / spoon dose (if any)"
+                  className="w-full border border-slate-300 rounded-lg p-2"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  type="submit"
+                  className="flex-1 bg-teal-700 hover:bg-teal-800 text-white font-bold py-2 rounded-lg transition-all"
+                >
+                  Update Medication
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditingMed(null)}
+                  className="px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold py-2 rounded-lg"
                 >
                   Cancel
                 </button>

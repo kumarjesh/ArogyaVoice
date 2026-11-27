@@ -63,6 +63,14 @@ export async function addMedication(elderId, medication) {
   });
 }
 
+export async function updateMedication(elderId, medId, updates) {
+  return request(`/api/elders/${elderId}/medications/${medId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(updates),
+  });
+}
+
 export async function deleteMedication(elderId, medId) {
   return request(`/api/elders/${elderId}/medications/${medId}`, {
     method: "DELETE",
