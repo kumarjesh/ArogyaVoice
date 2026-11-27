@@ -48,18 +48,22 @@ def make_call(
     Place an outbound call to the elder.
     webhook_url: URL that returns TwiML when the call connects.
     Returns: Twilio Call SID.
+    Note: Twilio Trial accounts disallow status_callback parameters.
     """
     client = _get_client()
     kwargs = {
         "to": to_number,
         "from_": get_from_number(),
         "url": webhook_url,
-        "method": "POST",
     }
-    if status_callback_url:
+    # Only include status_callback if explicitly supported (paid accounts)
+    # Trial accounts reject status_callback with HTTP 400
+    is_trial = os.getenv("TWILIO_TRIAL_ACCOUNT", "true").lower() == "true"
+    if status_callback_url and not is_trial:
         kwargs["status_callback"] = status_callback_url
         kwargs["status_callback_method"] = "POST"
         kwargs["status_callback_event"] = ["completed", "no-answer", "busy", "failed"]
+
     call = client.calls.create(**kwargs)
     return call.sid
 

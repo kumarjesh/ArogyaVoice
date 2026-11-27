@@ -14,7 +14,7 @@ Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot
 Start-Process powershell -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\frontend'; npm run dev"
 
 # 3. Start ngrok in a separate window with your reserved domain
-Start-Process powershell -ArgumentList "-NoExit", "-Command", "& 'C:\Users\satis\AppData\Local\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe' http 8000 --url https://sprite-cultivate-congrats.ngrok-free.dev"
+Start-Process powershell -ArgumentList "-NoExit", "-Command", "& 'C:\Users\satis\AppData\Local\Microsoft\WinGet\Packages\Ngrok.Ngrok_Microsoft.Winget.Source_8wekyb3d8bbwe\ngrok.exe' http --domain=sprite-cultivate-congrats.ngrok-free.dev 8000"
 
 Write-Host "`nAll 3 services launched in separate windows!" -ForegroundColor Green
 Write-Host "Backend:  http://localhost:8000" -ForegroundColor Yellow
