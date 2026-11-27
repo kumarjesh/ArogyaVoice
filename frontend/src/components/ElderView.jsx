@@ -40,6 +40,23 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   const audioChunksRef = useRef([]);
   const recognitionRef = useRef(null);
   const latestTranscriptRef = useRef("");
+  const silenceTimerRef = useRef(null);
+  const hasSpokenRef = useRef(false);
+  const isUserStoppingRef = useRef(false);
+
+  function resetSilenceTimer(durationMs, onTimeout) {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+    }
+    silenceTimerRef.current = setTimeout(onTimeout, durationMs);
+  }
+
+  function clearSilenceTimer() {
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+  }
 
   useEffect(() => {
     if (!elder?.id) return;
@@ -88,6 +105,9 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
     latestTranscriptRef.current = "";
     setElderTranscript("");
     setIsProcessing(false);
+    hasSpokenRef.current = false;
+    isUserStoppingRef.current = false;
+    clearSilenceTimer();
 
     const SpeechRecognition =
       typeof window !== "undefined"
@@ -98,14 +118,24 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
       try {
         const recognition = new SpeechRecognition();
         recognitionRef.current = recognition;
-        recognition.continuous = false;
+        // continuous=true prevents aggressive browser silence timeouts so elders have plenty of time to start speaking
+        recognition.continuous = true;
         recognition.interimResults = true;
-        // Set speech language to elder's chosen language (e.g. "te-IN", "kn-IN", "hi-IN", "en-IN")
         recognition.lang = elder?.language || "te-IN";
 
         recognition.onstart = () => {
           setIsRecording(true);
-          setAssistantMessage("Listening to you... Speak now in your language.");
+          setAssistantMessage("Listening... Take your time and speak in your language.");
+
+          // Generous 8-second window for seniors to think and start speaking
+          resetSilenceTimer(8000, () => {
+            if (!hasSpokenRef.current) {
+              isUserStoppingRef.current = true;
+              try { recognition.stop(); } catch (e) {}
+              setIsRecording(false);
+              setAssistantMessage("Whenever you are ready, tap the button to speak.");
+            }
+          });
         };
 
         recognition.onresult = (event) => {
@@ -113,34 +143,47 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
           let finalText = "";
           for (let i = 0; i < event.results.length; i++) {
             if (event.results[i].isFinal) {
-              finalText += event.results[i][0].transcript;
+              finalText += event.results[i][0].transcript + " ";
             } else {
               interimText += event.results[i][0].transcript;
             }
           }
-          const currentWords = finalText || interimText;
+          const currentWords = (finalText + interimText).trim();
           if (currentWords) {
+            hasSpokenRef.current = true;
             latestTranscriptRef.current = currentWords;
             setElderTranscript(currentWords);
+
+            // Once elder finishes their sentence, wait 2.8 seconds of natural pause before auto-processing
+            resetSilenceTimer(2800, () => {
+              isUserStoppingRef.current = true;
+              try { recognition.stop(); } catch (e) {}
+            });
           }
         };
 
         recognition.onerror = (event) => {
           console.warn("Speech recognition warning/error:", event.error);
+          // Ignore no-speech events so Chrome doesn't abort while elder is taking a breath
+          if (event.error === "no-speech") {
+            return;
+          }
           if (event.error === "not-allowed") {
             alert("Microphone permission denied. Please enable microphone permissions in your browser.");
+            clearSilenceTimer();
+            setIsRecording(false);
+            setIsProcessing(false);
           }
-          setIsRecording(false);
-          setIsProcessing(false);
         };
 
         recognition.onend = () => {
+          clearSilenceTimer();
           setIsRecording(false);
           const capturedText = latestTranscriptRef.current.trim();
           if (capturedText) {
             processTextSpeech(capturedText);
-          } else {
-            setAssistantMessage("I did not hear any speech. Please tap the button and speak clearly.");
+          } else if (!isUserStoppingRef.current) {
+            setAssistantMessage("Whenever you are ready, tap to speak.");
           }
         };
 
@@ -196,6 +239,8 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   }
 
   function stopRecording() {
+    clearSilenceTimer();
+    isUserStoppingRef.current = true;
     if (recognitionRef.current && isRecording) {
       try {
         recognitionRef.current.stop();
