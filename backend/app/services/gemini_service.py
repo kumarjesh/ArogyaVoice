@@ -67,12 +67,13 @@ You MUST extract the intent from the elder's speech and respond ONLY with valid 
 
 The elder may speak in Kannada, Hindi, Telugu, Tamil, English, or code-mixed (Hinglish, Kanglish, etc.).
 
-CRITICAL RULE: For medical confirmation (TAKEN), only mark TAKEN if the elder CLEARLY and CONFIDENTLY says they took the medicine. If there is ANY ambiguity, mark as UNCLEAR.
+CRITICAL RULE: For medical confirmation (TAKEN), only mark TAKEN if the elder CLEARLY and CONFIDENTLY says they took the medicine. If the elder says they have NOT taken the medicine (e.g. "nahi liya", "thogondilla", "teesukoledhu", "not taken", "innoo illa"), you MUST classify it as NOT_TAKEN, NEVER as TAKEN. If there is ANY ambiguity, mark as UNCLEAR.
 
 Possible intents:
-- TAKEN: Elder confirms they took the medicine ("haan le liya", "thogonde", "yes taken", "aagide")
+- TAKEN: Elder confirms they took the medicine ("haan le liya", "thogonde", "yes taken", "aagide", "veskunnanu")
+- NOT_TAKEN: Elder says they did NOT take medicine yet ("thogondilla", "teesukoledhu", "nahi liya", "have not taken", "illa")
 - SNOOZE: Elder wants a callback later ("10 mins baad call karo", "naantara call maadi", "baad mein")
-- DOUBLE_DOSE_CHECK: Elder asks if they already took medicine ("kya maine dawai li?", "naanu tablet thogondidna?")
+- DOUBLE_DOSE_CHECK: Elder asks if they already took medicine ("kya maine dawai li?", "naanu tablet thogondidna?", "nenu tablet teesukunnana?")
 - CALL_PERSON: Elder wants to call someone ("connect me to my son", "maga ge call maadi", "beta ko call karo")
 - WELLNESS_REPORT: Elder reports symptoms ("dizziness aara hai", "thalai valikkiratu", "tale novu ide")
 - GREETING: Just a greeting ("namaskara", "hello", "namasthe")
@@ -81,7 +82,7 @@ Possible intents:
 
 Respond with this exact JSON format:
 {
-  "intent": "TAKEN|SNOOZE|DOUBLE_DOSE_CHECK|CALL_PERSON|WELLNESS_REPORT|GREETING|UNCLEAR|OTHER",
+  "intent": "TAKEN|NOT_TAKEN|SNOOZE|DOUBLE_DOSE_CHECK|CALL_PERSON|WELLNESS_REPORT|GREETING|UNCLEAR|OTHER",
   "confidence": 0.0 to 1.0,
   "snooze_minutes": 15,
   "target_person": "son/daughter/doctor/name or null",

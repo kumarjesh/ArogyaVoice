@@ -14,6 +14,7 @@ import { db, doc, onSnapshot } from "../firebase";
 import {
   getElderDoseCheck,
   elderVoiceChat,
+  elderTextChat,
   listSpeedDials,
   confirmElderDose,
   snoozeElderDose,
@@ -37,6 +38,8 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   // Audio recording refs
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
+  const recognitionRef = useRef(null);
+  const latestTranscriptRef = useRef("");
 
   useEffect(() => {
     if (!elder?.id) return;
@@ -79,9 +82,76 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
     }
   }
 
-  // ── Browser Voice Simulator (Mic -> Sarvam STT -> Gemini -> Sarvam TTS) ──
+  // ── Voice Speech Engine (Web Speech API with live transcript + MediaRecorder fallback) ──
 
   async function startRecording() {
+    latestTranscriptRef.current = "";
+    setElderTranscript("");
+    setIsProcessing(false);
+
+    const SpeechRecognition =
+      typeof window !== "undefined"
+        ? window.SpeechRecognition || window.webkitSpeechRecognition
+        : null;
+
+    if (SpeechRecognition) {
+      try {
+        const recognition = new SpeechRecognition();
+        recognitionRef.current = recognition;
+        recognition.continuous = false;
+        recognition.interimResults = true;
+        // Set speech language to elder's chosen language (e.g. "te-IN", "kn-IN", "hi-IN", "en-IN")
+        recognition.lang = elder?.language || "te-IN";
+
+        recognition.onstart = () => {
+          setIsRecording(true);
+          setAssistantMessage("Listening to you... Speak now in your language.");
+        };
+
+        recognition.onresult = (event) => {
+          let interimText = "";
+          let finalText = "";
+          for (let i = 0; i < event.results.length; i++) {
+            if (event.results[i].isFinal) {
+              finalText += event.results[i][0].transcript;
+            } else {
+              interimText += event.results[i][0].transcript;
+            }
+          }
+          const currentWords = finalText || interimText;
+          if (currentWords) {
+            latestTranscriptRef.current = currentWords;
+            setElderTranscript(currentWords);
+          }
+        };
+
+        recognition.onerror = (event) => {
+          console.warn("Speech recognition warning/error:", event.error);
+          if (event.error === "not-allowed") {
+            alert("Microphone permission denied. Please enable microphone permissions in your browser.");
+          }
+          setIsRecording(false);
+          setIsProcessing(false);
+        };
+
+        recognition.onend = () => {
+          setIsRecording(false);
+          const capturedText = latestTranscriptRef.current.trim();
+          if (capturedText) {
+            processTextSpeech(capturedText);
+          } else {
+            setAssistantMessage("I did not hear any speech. Please tap the button and speak clearly.");
+          }
+        };
+
+        recognition.start();
+        return;
+      } catch (err) {
+        console.warn("Web Speech API start failed, falling back to MediaRecorder:", err);
+      }
+    }
+
+    // Fallback: MediaRecorder audio capture
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
@@ -92,13 +162,10 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
           mimeType = "audio/webm;codecs=opus";
         } else if (MediaRecorder.isTypeSupported("audio/webm")) {
           mimeType = "audio/webm";
-        } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
-          mimeType = "audio/ogg;codecs=opus";
         }
       }
 
-      const options = mimeType ? { mimeType } : undefined;
-      const mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
+      const mediaRecorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -119,39 +186,68 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
         await processVoiceAudio(audioBlob);
       };
 
-      // Deliver audio chunks every 200ms continuously so no buffer is lost on Android Chrome
       mediaRecorder.start(200);
       setIsRecording(true);
       setAssistantMessage("Listening to you... Speak now in your language.");
-      setElderTranscript("");
     } catch (err) {
       alert("Microphone access denied: " + err.message);
+      setIsRecording(false);
     }
   }
 
   function stopRecording() {
-    if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      setIsProcessing(true);
-      setAssistantMessage("Understanding your voice...");
+    if (recognitionRef.current && isRecording) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
     }
+    if (mediaRecorderRef.current && isRecording) {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
+    }
+    setIsRecording(false);
+    setIsProcessing(true);
+    setAssistantMessage("Understanding your words...");
   }
 
-  async function processVoiceAudio(blob) {
+  // Process speech text recognized live on device
+  async function processTextSpeech(text) {
     const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
-      const res = await elderVoiceChat(targetId, blob);
-      setElderTranscript(res.transcript || "No speech detected");
+      setIsProcessing(true);
+      setAssistantMessage("Thinking...");
+      const res = await elderTextChat(targetId, text);
+      setElderTranscript(res.transcript || text);
       setAssistantMessage(res.reply_text || "Thank you!");
 
-      // Play Sarvam TTS reply audio
       if (res.reply_audio_base64) {
         const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);
         audio.play().catch(() => {});
       }
+      loadDoses();
+    } catch (err) {
+      console.error("Text chat error:", err);
+      setAssistantMessage(`Could not process words: ${err.message || "Please try again."}`);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
 
-      // Reload dose statuses
+  // Process raw audio file upload fallback
+  async function processVoiceAudio(blob) {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
+    try {
+      setIsProcessing(true);
+      setAssistantMessage("Understanding your voice...");
+      const res = await elderVoiceChat(targetId, blob);
+      setElderTranscript(res.transcript || "Speech recognized");
+      setAssistantMessage(res.reply_text || "Thank you!");
+
+      if (res.reply_audio_base64) {
+        const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);
+        audio.play().catch(() => {});
+      }
       loadDoses();
     } catch (err) {
       console.error("Voice chat error:", err);
@@ -317,13 +413,20 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
             {assistantMessage ||
               `Press the big button below and speak in your language.`}
           </p>
-
-          {elderTranscript && (
-            <p className="text-sm font-medium text-slate-500 italic">
-              You said: "{elderTranscript}"
-            </p>
-          )}
         </div>
+
+        {/* ── LIVE TRANSCRIPT DISPLAY (DISPLAYS USER'S SPOKEN WORDS IN REAL TIME) ── */}
+        {(isRecording || elderTranscript) && (
+          <div className="bg-amber-100/95 border-2 border-amber-400 rounded-3xl p-5 text-center shadow-md space-y-1.5 transition-all">
+            <div className="flex items-center justify-center gap-2 text-xs font-black uppercase text-amber-950 tracking-wider">
+              <span className={`w-2.5 h-2.5 rounded-full ${isRecording ? "bg-red-500 animate-ping" : "bg-emerald-600"}`} />
+              <span>{isRecording ? "Listening to your words in real time..." : "What You Said (Transcript)"}</span>
+            </div>
+            <p className="text-xl sm:text-2xl font-black text-slate-950 font-sans leading-snug">
+              "{elderTranscript || (isRecording ? "Listening... start speaking..." : "")}"
+            </p>
+          </div>
+        )}
 
         {/* ── GIANT SPEAK BUTTON (BROWSER VOICE SIMULATOR) ── */}
         <div className="flex flex-col items-center justify-center space-y-3">

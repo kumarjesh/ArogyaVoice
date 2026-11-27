@@ -118,6 +118,14 @@ export async function getElderDoseCheck(elderId) {
   return request(`/elder/${elderId}/dose-check`);
 }
 
+export async function elderTextChat(elderId, text) {
+  return request(`/elder/${elderId}/text-chat`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+  });
+}
+
 export async function elderVoiceChat(elderId, audioBlob) {
   const formData = new FormData();
   const ext = audioBlob.type.includes("webm") ? "webm" : audioBlob.type.includes("ogg") ? "ogg" : "wav";

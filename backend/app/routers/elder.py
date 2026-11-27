@@ -20,6 +20,7 @@ from app.models.schemas import (
     DoseLog,
     DoseStatus,
 )
+from pydantic import BaseModel
 from app.services import firebase_service as fb
 from app.services.gemini_service import extract_intent
 from app.services.sarvam_service import speech_to_text, text_to_speech
@@ -27,6 +28,122 @@ from app.services.sarvam_service import speech_to_text, text_to_speech
 router = APIRouter()
 logger = logging.getLogger("elder")
 IST = ZoneInfo("Asia/Kolkata")
+
+
+class TextChatRequest(BaseModel):
+    text: str
+
+
+# ── Real-Time Web Speech Chat ─────────────────────────────────────────
+
+@router.post("/{elder_id}/text-chat")
+async def text_chat(
+    elder_id: str,
+    payload: TextChatRequest,
+):
+    """
+    Direct Speech-to-Text Chat from Elder View:
+    Receives real-time transcript from browser (e.g. Android Chrome Web Speech API).
+    1. Gemini extracts intent and produces regional response
+    2. Sarvam TTS converts response to regional speech audio
+    3. Dose logs and caregiver alerts are updated
+    """
+    import base64
+    elder = fb.get_elder(elder_id)
+    if not elder:
+        raise HTTPException(404, "Elder not found")
+
+    transcript = payload.text.strip()
+    if not transcript:
+        raise HTTPException(400, "Empty speech transcript")
+
+    lang = elder.language.value
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    meds = fb.get_medications(elder_id, active_only=True)
+    med_context = ", ".join(m.medicine_name for m in meds) if meds else "general"
+
+    # Gemini intent extraction
+    intent_result = await extract_intent(transcript, lang, med_context)
+    reply_text = intent_result.reply_text
+
+    if intent_result.intent == "TAKEN" and intent_result.confidence >= 0.7 and meds:
+        logs = fb.get_dose_logs_for_date(elder_id, today)
+        taken_med_ids = {l.medication_id for l in logs if l.status == DoseStatus.TAKEN}
+        untaken = [m for m in meds if m.id not in taken_med_ids]
+
+        if untaken:
+            med = untaken[0]
+            log = DoseLog(
+                elder_id=elder_id,
+                medication_id=med.id,
+                medication_name=med.medicine_name,
+                scheduled_time=med.time,
+                date=today,
+                status=DoseStatus.TAKEN,
+                taken_at=datetime.now(IST),
+                call_direction=CallDirection.INBOUND,
+                elder_response_text=transcript,
+            )
+            fb.create_dose_log(log)
+            fb.send_caregiver_alert(
+                elder_id=elder_id,
+                alert_type=AlertType.SYSTEM,
+                title=f"✅ Dose Taken (Voice): {elder.name}",
+                message=f"{elder.name} confirmed taking {med.medicine_name} via voice.",
+                priority=AlertPriority.LOW,
+                medication_name=med.medicine_name,
+            )
+
+    elif intent_result.intent == "DOUBLE_DOSE_CHECK":
+        logs = fb.get_dose_logs_for_date(elder_id, today)
+        taken = [l for l in logs if l.status == DoseStatus.TAKEN]
+        from app.routers.voice import _get_text
+        if taken:
+            names = ", ".join(l.medication_name for l in taken)
+            times = ", ".join(
+                l.taken_at.strftime("%I:%M %p") if l.taken_at else l.scheduled_time
+                for l in taken
+            )
+            reply_text = _get_text("double_dose_taken", lang, elder.honorific, names, times)
+        else:
+            reply_text = _get_text("double_dose_none", lang, elder.honorific)
+
+    elif intent_result.intent == "NOT_TAKEN":
+        if lang == "kn-IN":
+            reply_text = f"Sari {elder.honorific}, dayavittu nimma aushadhi thegedukoli. Arogya mukhyavaagide."
+        elif lang == "te-IN":
+            reply_text = f"Sare {elder.honorific}, dayachesi mee mandhu vesukondi. Arogyam mukhyam."
+        elif lang == "hi-IN":
+            reply_text = f"Theek hai {elder.honorific}, kripya apni dawai le lijiye. Sehat zaroori hai."
+        else:
+            reply_text = f"Okay {elder.honorific}, please remember to take your medicine soon."
+
+    elif intent_result.intent == "CALL_PERSON" and intent_result.target_person:
+        contact = fb.find_speed_dial_by_alias(elder_id, intent_result.target_person)
+        if contact:
+            reply_text = f"To call {contact.name}, please use the call button on screen or dial from your phone."
+        else:
+            reply_text = f"Sorry {elder.honorific}, I could not find that contact."
+
+    elif intent_result.intent == "WELLNESS_REPORT" and intent_result.wellness_summary:
+        fb.send_caregiver_alert(
+            elder_id=elder_id,
+            alert_type=AlertType.WELLNESS_SYMPTOM,
+            title=f"🩺 Wellness Report (Voice): {elder.name}",
+            message=f"{elder.name} reported: {intent_result.wellness_summary}",
+            priority=AlertPriority.MEDIUM,
+        )
+
+    # Sarvam TTS for the reply audio
+    reply_audio = await text_to_speech(reply_text, lang)
+
+    return {
+        "transcript": transcript,
+        "intent": intent_result.intent,
+        "confidence": intent_result.confidence,
+        "reply_text": reply_text,
+        "reply_audio_base64": base64.b64encode(reply_audio).decode(),
+    }
 
 
 # ── Browser Voice Simulator ───────────────────────────────────────────
