@@ -179,7 +179,7 @@ class IntentResult(BaseModel):
     """Gemini intent extraction result from elder's speech."""
     intent: str  # TAKEN, SNOOZE, UNCLEAR, DOUBLE_DOSE_CHECK, CALL_PERSON, WELLNESS_REPORT, GREETING, OTHER
     confidence: float = 0.0
-    snooze_minutes: int = 15
+    snooze_minutes: Optional[int] = 15
     target_person: Optional[str] = None  # For CALL_PERSON intent
     wellness_summary: Optional[str] = None  # For WELLNESS_REPORT
     reply_text: str = ""  # Natural regional reply to speak back

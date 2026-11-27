@@ -60,8 +60,9 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   }, [elder?.id]);
 
   async function loadDoses() {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
-      const data = await getElderDoseCheck(elder.id);
+      const data = await getElderDoseCheck(targetId);
       setDoseData(data);
     } catch (e) {
       console.error("Failed loading doses:", e);
@@ -69,8 +70,9 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   }
 
   async function loadSpeedDials() {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
-      const list = await listSpeedDials(elder.id);
+      const list = await listSpeedDials(targetId);
       setSpeedDials(list);
     } catch (e) {
       console.error("Failed loading speed dials:", e);
@@ -100,19 +102,25 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
+        if (event.data && event.data.size > 0) {
           audioChunksRef.current.push(event.data);
         }
       };
 
       mediaRecorder.onstop = async () => {
         const recordedMime = mediaRecorder.mimeType || "audio/webm";
-        const audioBlob = new Blob(audioChunksRef.current, { type: recordedMime });
         stream.getTracks().forEach((track) => track.stop());
+        if (audioChunksRef.current.length === 0) {
+          setAssistantMessage("No audio captured. Please tap and speak clearly.");
+          setIsProcessing(false);
+          return;
+        }
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedMime });
         await processVoiceAudio(audioBlob);
       };
 
-      mediaRecorder.start();
+      // Deliver audio chunks every 200ms continuously so no buffer is lost on Android Chrome
+      mediaRecorder.start(200);
       setIsRecording(true);
       setAssistantMessage("Listening to you... Speak now in your language.");
       setElderTranscript("");
@@ -131,8 +139,9 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   }
 
   async function processVoiceAudio(blob) {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
-      const res = await elderVoiceChat(elder.id, blob);
+      const res = await elderVoiceChat(targetId, blob);
       setElderTranscript(res.transcript || "No speech detected");
       setAssistantMessage(res.reply_text || "Thank you!");
 
@@ -145,7 +154,8 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
       // Reload dose statuses
       loadDoses();
     } catch (err) {
-      setAssistantMessage("Sorry, I could not hear you. Please try again.");
+      console.error("Voice chat error:", err);
+      setAssistantMessage("Sorry, I could not hear you clearly. Please try speaking again.");
     } finally {
       setIsProcessing(false);
     }
@@ -153,10 +163,11 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
 
   // 1-Tap Touch confirmation (Alternative to speaking or pressing 1 on phone dialpad)
   async function handle1TapTaken() {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
       setIsProcessing(true);
       setAssistantMessage("Saving dose confirmation...");
-      const res = await confirmElderDose(elder.id);
+      const res = await confirmElderDose(targetId);
       setAssistantMessage(res.reply_text || "Very good! Thank you for taking your medicine.");
       if (res.reply_audio_base64) {
         const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);
@@ -171,10 +182,11 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
   }
 
   async function handle1TapSnooze() {
+    const targetId = elder?.id || "mPXwuTecKLZ9vrBTyjvY";
     try {
       setIsProcessing(true);
       setAssistantMessage("Setting reminder for 15 minutes...");
-      const res = await snoozeElderDose(elder.id, 15);
+      const res = await snoozeElderDose(targetId, 15);
       setAssistantMessage(res.reply_text || "Okay, I will remind you again in 15 minutes.");
       if (res.reply_audio_base64) {
         const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);

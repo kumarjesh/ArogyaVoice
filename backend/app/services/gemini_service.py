@@ -130,6 +130,8 @@ Extract the intent and generate a warm, respectful reply in the elder's language
             text = text.strip()
 
         data = json.loads(text)
+        if data.get("snooze_minutes") is None:
+            data["snooze_minutes"] = 15
         return IntentResult(**data)
     except Exception as exc:
         logger.error(f"extract_intent failed for transcript '{transcript}': {exc}", exc_info=True)

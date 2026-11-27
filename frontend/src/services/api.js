@@ -1,4 +1,19 @@
-const API_BASE = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const RENDER_BACKEND_URL = "https://arogyavoice-backend.onrender.com";
+
+export const API_BASE = (() => {
+  const envUrl = import.meta.env.VITE_API_BASE_URL;
+  if (envUrl && !envUrl.includes("localhost") && !envUrl.includes("127.0.0.1")) {
+    return envUrl;
+  }
+  if (
+    typeof window !== "undefined" &&
+    window.location.hostname !== "localhost" &&
+    window.location.hostname !== "127.0.0.1"
+  ) {
+    return RENDER_BACKEND_URL;
+  }
+  return envUrl || "http://localhost:8000";
+})();
 
 async function request(path, options = {}) {
   const url = `${API_BASE}${path}`;
