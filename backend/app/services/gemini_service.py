@@ -8,6 +8,7 @@ Google Gemini service for:
 from __future__ import annotations
 
 import base64
+import logging
 import os
 from typing import Optional
 
@@ -16,8 +17,11 @@ from google.genai.types import Part
 
 from app.models.schemas import IntentResult, PillStripScanResult
 
+logger = logging.getLogger("gemini")
+
 _client: Optional[genai.Client] = None
-_model: str = "gemini-2.0-flash"
+PRIMARY_MODEL: str = "gemini-3.5-flash-lite"
+FALLBACK_MODEL: str = "gemini-3.8-flash"
 
 
 def init_gemini() -> None:
@@ -32,6 +36,28 @@ def _get_client() -> genai.Client:
     if _client is None:
         init_gemini()
     return _client
+
+
+def _generate_with_fallback(contents, system_instruction=None, temperature=0.3):
+    """Try PRIMARY_MODEL first; if 404/503/rate-limited, fallback to FALLBACK_MODEL."""
+    client = _get_client()
+    config = {"temperature": temperature}
+    if system_instruction:
+        config["system_instruction"] = system_instruction
+
+    try:
+        return client.models.generate_content(
+            model=PRIMARY_MODEL,
+            contents=contents,
+            config=config,
+        )
+    except Exception as primary_err:
+        logger.warning(f"Primary model {PRIMARY_MODEL} failed: {primary_err}. Trying fallback {FALLBACK_MODEL}")
+        return client.models.generate_content(
+            model=FALLBACK_MODEL,
+            contents=contents,
+            config=config,
+        )
 
 
 # ── Intent Extraction ──────────────────────────────────────────────────
@@ -64,6 +90,15 @@ Respond with this exact JSON format:
 }"""
 
 
+FALLBACK_UNCLEAR_TEXT = {
+    "kn-IN": "Kshamisee, nanage arthavagillla. Howdu annri, athava 1 dabbisi.",
+    "te-IN": "Kshaminchandi, naaku artham kaledhu. Avunu cheppandi, leda 1 noppandi.",
+    "hi-IN": "Maaf kijiye, mujhe samajh nahi aaya. Haan boliye, ya 1 dabayiye.",
+    "ta-IN": "Mannikkanum, enakku puriyavillai. Aamam sollunnga, illanal 1 pottunnga.",
+    "en-IN": "Sorry, I could not understand. Please say yes if you took the medicine, or press 1.",
+}
+
+
 async def extract_intent(
     transcript: str,
     language_code: str = "kn-IN",
@@ -73,7 +108,6 @@ async def extract_intent(
     Given an elder's transcribed speech, extract intent and generate a reply.
     medication_context: e.g. "two green tablets after breakfast"
     """
-    client = _get_client()
     user_prompt = f"""Elder's language: {language_code}
 Current medication context: {medication_context or 'general conversation'}
 Elder said: "{transcript}"
@@ -81,10 +115,10 @@ Elder said: "{transcript}"
 Extract the intent and generate a warm, respectful reply in the elder's language."""
 
     try:
-        resp = client.models.generate_content(
-            model=_model,
+        resp = _generate_with_fallback(
             contents=user_prompt,
-            config={"system_instruction": INTENT_SYSTEM_PROMPT, "temperature": 0.3},
+            system_instruction=INTENT_SYSTEM_PROMPT,
+            temperature=0.3,
         )
         import json
         text = resp.text.strip()
@@ -98,11 +132,12 @@ Extract the intent and generate a warm, respectful reply in the elder's language
         data = json.loads(text)
         return IntentResult(**data)
     except Exception as exc:
-        # On any parse failure, return UNCLEAR so we never accidentally confirm a dose
+        logger.error(f"extract_intent failed for transcript '{transcript}': {exc}", exc_info=True)
+        fallback_msg = FALLBACK_UNCLEAR_TEXT.get(language_code, FALLBACK_UNCLEAR_TEXT["en-IN"])
         return IntentResult(
             intent="UNCLEAR",
             confidence=0.0,
-            reply_text="Sorry, I could not understand. Please say yes if you took the medicine, or press 1.",
+            reply_text=fallback_msg,
         )
 
 
@@ -114,15 +149,15 @@ async def generate_reply(
     system_context: str = "You are a warm, caring medication reminder assistant for elderly people in India. Reply briefly in the specified language.",
 ) -> str:
     """Generate a natural-language reply for the elder."""
-    client = _get_client()
     try:
-        resp = client.models.generate_content(
-            model=_model,
+        resp = _generate_with_fallback(
             contents=f"Language: {language_code}\n{prompt}",
-            config={"system_instruction": system_context, "temperature": 0.5},
+            system_instruction=system_context,
+            temperature=0.5,
         )
         return resp.text.strip()
-    except Exception:
+    except Exception as exc:
+        logger.error(f"generate_reply failed: {exc}")
         return prompt  # Fallback to prompt itself
 
 
@@ -158,14 +193,12 @@ async def scan_pill_strip(
     Use Gemini Vision to scan a pill strip photo.
     Returns extracted medicine info + flags potential duplicate generics.
     """
-    client = _get_client()
     image_part = Part.from_bytes(data=image_bytes, mime_type=mime_type)
 
     try:
-        resp = client.models.generate_content(
-            model=_model,
+        resp = _generate_with_fallback(
             contents=[VISION_PROMPT, image_part],
-            config={"temperature": 0.2},
+            temperature=0.2,
         )
         import json
         text = resp.text.strip()
@@ -192,6 +225,7 @@ async def scan_pill_strip(
             results.append(scan)
         return results
     except Exception as exc:
+        logger.error(f"scan_pill_strip failed: {exc}")
         return []
 
 

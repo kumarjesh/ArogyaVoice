@@ -58,8 +58,8 @@ async def voice_chat(
     # 1. Sarvam STT
     transcript = await speech_to_text(audio_bytes, lang, mime)
     if not transcript:
-        # Generate "I didn't hear you" reply
-        reply_text = "I could not hear you clearly. Please try again."
+        from app.services.gemini_service import FALLBACK_UNCLEAR_TEXT
+        reply_text = FALLBACK_UNCLEAR_TEXT.get(lang, FALLBACK_UNCLEAR_TEXT["en-IN"])
         reply_audio = await text_to_speech(reply_text, lang)
         return {
             "transcript": "",
@@ -111,11 +111,16 @@ async def voice_chat(
     elif intent_result.intent == "DOUBLE_DOSE_CHECK":
         logs = fb.get_dose_logs_for_date(elder_id, today)
         taken = [l for l in logs if l.status == DoseStatus.TAKEN]
+        from app.routers.voice import _get_text
         if taken:
             names = ", ".join(l.medication_name for l in taken)
-            reply_text = f"Yes {elder.honorific}, you already took {names} today."
+            times = ", ".join(
+                l.taken_at.strftime("%I:%M %p") if l.taken_at else l.scheduled_time
+                for l in taken
+            )
+            reply_text = _get_text("double_dose_taken", lang, elder.honorific, names, times)
         else:
-            reply_text = f"No {elder.honorific}, you have not taken any medicine yet today."
+            reply_text = _get_text("double_dose_none", lang, elder.honorific)
 
     elif intent_result.intent == "CALL_PERSON" and intent_result.target_person:
         contact = fb.find_speed_dial_by_alias(elder_id, intent_result.target_person)
@@ -140,6 +145,94 @@ async def voice_chat(
         "transcript": transcript,
         "intent": intent_result.intent,
         "confidence": intent_result.confidence,
+        "reply_text": reply_text,
+        "reply_audio_base64": base64.b64encode(reply_audio).decode(),
+    }
+
+
+# ── Direct Touch Action (1-Tap "I Took It" or "Snooze") ───────────────
+
+@router.post("/{elder_id}/confirm-dose")
+async def confirm_dose_touch(
+    elder_id: str,
+    med_id: Optional[str] = Query(None),
+):
+    """
+    1-Tap Touch confirmation from Elder View screen (equivalent to pressing 1 on dialpad).
+    """
+    import base64
+    elder = fb.get_elder(elder_id)
+    if not elder:
+        raise HTTPException(404, "Elder not found")
+
+    lang = elder.language.value
+    today = datetime.now(IST).strftime("%Y-%m-%d")
+    meds = fb.get_medications(elder_id, active_only=True)
+    if not meds:
+        raise HTTPException(404, "No active medications found")
+
+    target_med = next((m for m in meds if m.id == med_id), None) if med_id else None
+    if not target_med:
+        logs = fb.get_dose_logs_for_date(elder_id, today)
+        taken_ids = {l.medication_id for l in logs if l.status == DoseStatus.TAKEN}
+        untaken = [m for m in meds if m.id not in taken_ids]
+        target_med = untaken[0] if untaken else meds[0]
+
+    now = datetime.now(IST)
+    log = DoseLog(
+        elder_id=elder_id,
+        medication_id=target_med.id,
+        medication_name=target_med.medicine_name,
+        scheduled_time=target_med.time,
+        date=today,
+        status=DoseStatus.TAKEN,
+        taken_at=now,
+        call_direction=CallDirection.INBOUND,
+        elder_response_text="1 (Touch Button)",
+    )
+    fb.create_dose_log(log)
+    fb.send_caregiver_alert(
+        elder_id=elder_id,
+        alert_type=AlertType.SYSTEM,
+        title=f"✅ Dose Taken (1-Tap): {elder.name}",
+        message=f"{elder.name} confirmed taking {target_med.medicine_name} at {now.strftime('%I:%M %p')}.",
+        priority=AlertPriority.LOW,
+        medication_name=target_med.medicine_name,
+    )
+
+    from app.routers.voice import _get_text
+    reply_text = _get_text("thank_taken", lang, elder.honorific)
+    reply_audio = await text_to_speech(reply_text, lang)
+
+    return {
+        "success": True,
+        "medication_name": target_med.medicine_name,
+        "reply_text": reply_text,
+        "reply_audio_base64": base64.b64encode(reply_audio).decode(),
+    }
+
+
+@router.post("/{elder_id}/snooze-dose")
+async def snooze_dose_touch(
+    elder_id: str,
+    minutes: int = Query(15),
+):
+    """
+    1-Tap Touch snooze from Elder View screen (equivalent to pressing 2 on dialpad).
+    """
+    import base64
+    elder = fb.get_elder(elder_id)
+    if not elder:
+        raise HTTPException(404, "Elder not found")
+
+    lang = elder.language.value
+    from app.routers.voice import _get_text
+    reply_text = _get_text("snooze_confirm", lang, elder.honorific, minutes)
+    reply_audio = await text_to_speech(reply_text, lang)
+
+    return {
+        "success": True,
+        "minutes": minutes,
         "reply_text": reply_text,
         "reply_audio_base64": base64.b64encode(reply_audio).decode(),
     }

@@ -115,9 +115,18 @@ async def speech_to_text(
     Handles Kannada, Hindi, Telugu, Tamil, English, and code-mixed speech.
     Returns the transcript string.
     """
-    ext = "wav" if "wav" in mime_type else "mp3" if "mp3" in mime_type else "ogg"
+    ext = (
+        "webm" if "webm" in mime_type
+        else "wav" if "wav" in mime_type
+        else "mp3" if "mp3" in mime_type
+        else "ogg"
+    )
     files = {"file": (f"audio.{ext}", io.BytesIO(audio_bytes), mime_type)}
-    data = {"model": "saaras:v4", "mode": "transcribe"}
+    data = {
+        "model": "saaras:v4",
+        "mode": "transcribe",
+        "language_code": language_code,
+    }
 
     async with httpx.AsyncClient(timeout=30.0) as client:
         resp = await client.post(
@@ -136,9 +145,18 @@ def speech_to_text_sync(
     mime_type: str = "audio/wav",
 ) -> str:
     """Synchronous version for use in non-async contexts."""
-    ext = "wav" if "wav" in mime_type else "mp3" if "mp3" in mime_type else "ogg"
+    ext = (
+        "webm" if "webm" in mime_type
+        else "wav" if "wav" in mime_type
+        else "mp3" if "mp3" in mime_type
+        else "ogg"
+    )
     files = {"file": (f"audio.{ext}", io.BytesIO(audio_bytes), mime_type)}
-    data = {"model": "saaras:v4", "mode": "transcribe"}
+    data = {
+        "model": "saaras:v4",
+        "mode": "transcribe",
+        "language_code": language_code,
+    }
 
     with httpx.Client(timeout=30.0) as client:
         resp = client.post(

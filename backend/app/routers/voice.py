@@ -123,6 +123,7 @@ async def outbound_greeting(
         audio_url=audio_url,
         action_url=action_url,
         dtmf_timeout=5,
+        language=elder.language.value,
     )
     return _twiml(twiml)
 
@@ -232,7 +233,7 @@ async def _handle_taken(elder, med, med_desc, log_id, base, lang):
         thank_text = _get_text("thank_wellness_intro", lang, elder.honorific)
         audio_url = await ensure_audio(thank_text, lang, base)
         action_url = f"{base}/voice/wellness-response?elder_id={elder.id}&log_id={log_id}"
-        return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=8))
+        return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=8, language=lang))
 
     # Simple thank you and hang up
     thank_text = _get_text("thank_taken", lang, elder.honorific)
@@ -278,7 +279,7 @@ async def _handle_unclear(elder, med_desc, log_id, base, lang, attempt):
     retry_text = _get_text("unclear_retry", lang, elder.honorific, med_desc)
     audio_url = await ensure_audio(retry_text, lang, base)
     action_url = f"{base}/voice/gather-response?elder_id={elder.id}&med_id={log_id}&log_id={log_id}&attempt=2"
-    return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=6))
+    return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=6, language=lang))
 
 
 # ── Wellness Check ─────────────────────────────────────────────────────
@@ -429,7 +430,7 @@ async def _serve_inbound_menu(elder, base):
     menu_text = _get_text("inbound_menu", lang, elder.honorific)
     audio_url = await ensure_audio(menu_text, lang, base)
     action_url = f"{base}/voice/inbound-response?elder_id={elder.id}"
-    return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=6))
+    return _twiml(build_play_and_gather(audio_url, action_url, dtmf_timeout=6, language=lang))
 
 
 @router.post("/inbound-response")

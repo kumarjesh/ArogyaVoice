@@ -305,67 +305,97 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
 
       {/* ── TOP NAV HEADER ── */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-xs">
-        <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-lg shadow-xs">
-              आ
+        <div className="max-w-6xl mx-auto px-3 sm:px-4 py-2.5 sm:py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2.5">
+          {/* Top row: Brand + Mobile quick actions */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2.5">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-teal-700 text-white flex items-center justify-center font-bold text-base sm:text-lg shadow-xs">
+                आ
+              </div>
+              <div>
+                <h1 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
+                  ArogyaVoice
+                </h1>
+                <p className="text-[11px] sm:text-xs text-teal-700 font-medium">
+                  Caregiver Control Center
+                </p>
+              </div>
             </div>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 leading-tight">
-                ArogyaVoice
-              </h1>
-              <p className="text-xs text-teal-700 font-medium">
-                Caregiver Control Center
-              </p>
+
+            {/* Mobile Header Quick Actions (Immediately visible on phones without horizontal scroll!) */}
+            <div className="flex md:hidden items-center gap-1.5">
+              <button
+                onClick={() => setShowAlertsDrawer(!showAlertsDrawer)}
+                className="relative p-2 text-slate-600 bg-slate-100 rounded-lg hover:bg-teal-50"
+                title="Alerts"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadAlerts.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                    {unreadAlerts.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={onSwitchToElder}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-700 text-white text-xs font-bold rounded-lg shadow-xs active:scale-95"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Elder View
+              </button>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          {/* Controls: Elder selector & Desktop actions */}
+          <div className="flex items-center justify-between md:justify-end gap-2 w-full md:w-auto">
             {/* Elder Selector */}
-            <select
-              value={selectedElder?.id || ""}
-              onChange={(e) => {
-                const el = elders.find((x) => x.id === e.target.value);
-                if (el) setSelectedElder(el);
-              }}
-              className="bg-slate-100 border border-slate-300 text-slate-800 text-sm rounded-lg px-3 py-1.5 font-medium"
-            >
-              {elders.map((e) => (
-                <option key={e.id} value={e.id}>
-                  {e.honorific} {e.name} ({e.language})
-                </option>
-              ))}
-            </select>
+            <div className="flex items-center gap-1.5 flex-1 md:flex-initial">
+              <select
+                value={selectedElder?.id || ""}
+                onChange={(e) => {
+                  const el = elders.find((x) => x.id === e.target.value);
+                  if (el) setSelectedElder(el);
+                }}
+                className="w-full md:w-auto bg-slate-100 border border-slate-300 text-slate-800 text-xs sm:text-sm rounded-lg px-2.5 py-1.5 font-medium truncate"
+              >
+                {elders.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.honorific} {e.name} ({e.language})
+                  </option>
+                ))}
+              </select>
 
-            <button
-              onClick={() => setShowAddElder(true)}
-              title="Add Elder"
-              className="p-2 text-slate-600 hover:text-teal-700 bg-slate-100 rounded-lg hover:bg-teal-50"
-            >
-              <Plus className="w-4 h-4" />
-            </button>
+              <button
+                onClick={() => setShowAddElder(true)}
+                title="Add Elder"
+                className="p-1.5 sm:p-2 text-slate-600 hover:text-teal-700 bg-slate-100 rounded-lg hover:bg-teal-50 shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </button>
+            </div>
 
-            {/* Notification Bell */}
-            <button
-              onClick={() => setShowAlertsDrawer(!showAlertsDrawer)}
-              className="relative p-2 text-slate-600 hover:text-teal-700 bg-slate-100 rounded-lg hover:bg-teal-50"
-            >
-              <Bell className="w-4 h-4" />
-              {unreadAlerts.length > 0 && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
-                  {unreadAlerts.length}
-                </span>
-              )}
-            </button>
+            {/* Desktop-only action buttons */}
+            <div className="hidden md:flex items-center gap-2">
+              <button
+                onClick={() => setShowAlertsDrawer(!showAlertsDrawer)}
+                className="relative p-2 text-slate-600 hover:text-teal-700 bg-slate-100 rounded-lg hover:bg-teal-50"
+              >
+                <Bell className="w-4 h-4" />
+                {unreadAlerts.length > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center animate-pulse">
+                    {unreadAlerts.length}
+                  </span>
+                )}
+              </button>
 
-            {/* Switch to Elder View */}
-            <button
-              onClick={onSwitchToElder}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold rounded-lg hover:bg-teal-100"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              Elder View
-            </button>
+              <button
+                onClick={onSwitchToElder}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-teal-50 text-teal-800 border border-teal-200 text-xs font-semibold rounded-lg hover:bg-teal-100"
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+                Elder View
+              </button>
+            </div>
           </div>
         </div>
 
@@ -450,8 +480,8 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
       )}
 
       {/* ── TAB NAV ── */}
-      <div className="max-w-6xl mx-auto px-4 mt-4">
-        <div className="flex border-b border-slate-200 gap-6 text-sm font-medium">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 mt-3 sm:mt-4">
+        <div className="flex border-b border-slate-200 gap-3 sm:gap-6 text-xs sm:text-sm font-medium overflow-x-auto scrollbar-none whitespace-nowrap pb-0.5">
           {[
             { id: "timeline", label: "Live Daily Timeline" },
             { id: "schedule", label: "Medication Schedule" },
@@ -462,7 +492,7 @@ export default function CaregiverPortal({ caregiverUid = "demo_caregiver", onSwi
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
-              className={`pb-3 font-semibold transition-all relative ${
+              className={`pb-2.5 sm:pb-3 px-1 sm:px-0 font-semibold transition-all shrink-0 relative ${
                 activeTab === tab.id
                   ? "text-teal-700 border-b-2 border-teal-700"
                   : "text-slate-500 hover:text-slate-800"

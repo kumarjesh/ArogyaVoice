@@ -15,6 +15,8 @@ import {
   getElderDoseCheck,
   elderVoiceChat,
   listSpeedDials,
+  confirmElderDose,
+  snoozeElderDose,
 } from "../services/api";
 import { WebRTCVoiceCall } from "../services/webrtc";
 
@@ -81,7 +83,20 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
-      const mediaRecorder = new MediaRecorder(stream);
+
+      let mimeType = "";
+      if (typeof MediaRecorder !== "undefined") {
+        if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
+          mimeType = "audio/webm;codecs=opus";
+        } else if (MediaRecorder.isTypeSupported("audio/webm")) {
+          mimeType = "audio/webm";
+        } else if (MediaRecorder.isTypeSupported("audio/ogg;codecs=opus")) {
+          mimeType = "audio/ogg;codecs=opus";
+        }
+      }
+
+      const options = mimeType ? { mimeType } : undefined;
+      const mediaRecorder = options ? new MediaRecorder(stream, options) : new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
 
       mediaRecorder.ondataavailable = (event) => {
@@ -91,14 +106,15 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
       };
 
       mediaRecorder.onstop = async () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: "audio/wav" });
+        const recordedMime = mediaRecorder.mimeType || "audio/webm";
+        const audioBlob = new Blob(audioChunksRef.current, { type: recordedMime });
         stream.getTracks().forEach((track) => track.stop());
         await processVoiceAudio(audioBlob);
       };
 
       mediaRecorder.start();
       setIsRecording(true);
-      setAssistantMessage("Listening to you... Speak now.");
+      setAssistantMessage("Listening to you... Speak now in your language.");
       setElderTranscript("");
     } catch (err) {
       alert("Microphone access denied: " + err.message);
@@ -135,25 +151,77 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
     }
   }
 
+  // 1-Tap Touch confirmation (Alternative to speaking or pressing 1 on phone dialpad)
+  async function handle1TapTaken() {
+    try {
+      setIsProcessing(true);
+      setAssistantMessage("Saving dose confirmation...");
+      const res = await confirmElderDose(elder.id);
+      setAssistantMessage(res.reply_text || "Very good! Thank you for taking your medicine.");
+      if (res.reply_audio_base64) {
+        const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);
+        audio.play().catch(() => {});
+      }
+      loadDoses();
+    } catch (err) {
+      setAssistantMessage("Could not confirm dose: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
+  async function handle1TapSnooze() {
+    try {
+      setIsProcessing(true);
+      setAssistantMessage("Setting reminder for 15 minutes...");
+      const res = await snoozeElderDose(elder.id, 15);
+      setAssistantMessage(res.reply_text || "Okay, I will remind you again in 15 minutes.");
+      if (res.reply_audio_base64) {
+        const audio = new Audio("data:audio/wav;base64," + res.reply_audio_base64);
+        audio.play().catch(() => {});
+      }
+    } catch (err) {
+      setAssistantMessage("Could not snooze: " + err.message);
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   // Quick double-dose check voice question
   async function askDoseCheck() {
     setIsProcessing(true);
     setAssistantMessage("Checking today's medicines...");
     try {
-      const today = new Date().toISOString().split("T")[0];
       const data = await getElderDoseCheck(elder.id);
       const taken = data.medications.filter((m) => m.status === "taken");
+      const lang = elder?.language || "kn-IN";
+      const h = elder?.honorific || "Amma";
 
       let reply = "";
       if (taken.length > 0) {
         const names = taken.map((m) => m.name).join(", ");
-        reply = `Yes ${elder.honorific}, you already took ${names} today. You do not need to take it again!`;
+        if (lang === "kn-IN") {
+          reply = `ಹೌದು ${h}, ನೀವು ಇಂದು ${names} ತೆಗೆದುಕೊಂಡಿದ್ದೀರಿ. ಮತ್ತೆ ತೆಗೆದುಕೊಳ್ಳುವ ಅಗತ್ಯವಿಲ್ಲ!`;
+        } else if (lang === "te-IN") {
+          reply = `అవును ${h}, మీరు ఈరోజు ${names} వేసుకున్నారు. మళ్లీ వేసుకోవాల్సిన అవసరం లేదు!`;
+        } else if (lang === "hi-IN") {
+          reply = `हाँ ${h}, आपने आज ${names} ले ली है। दोबारा लेने की जरूरत नहीं है!`;
+        } else {
+          reply = `Yes ${h}, you already took ${names} today. You do not need to take it again!`;
+        }
       } else {
-        reply = `No ${elder.honorific}, you have not taken any medicines yet today.`;
+        if (lang === "kn-IN") {
+          reply = `ಇಲ್ಲ ${h}, ಇಂದು ನೀವು ಇನ್ನೂ ಯಾವುದೇ ಔಷಧಿ ತೆಗೆದುಕೊಂಡಿಲ್ಲ. ಸಮಯವಾದಾಗ ನೆನಪಿಸುತ್ತೇನೆ.`;
+        } else if (lang === "te-IN") {
+          reply = `లేదు ${h}, ఈరోజు మీరు ఇంకా ఏ మందులు వేసుకోలేదు. సమయం అయినప్పుడు గుర్తుచేస్తాను.`;
+        } else if (lang === "hi-IN") {
+          reply = `नहीं ${h}, आपने आज अभी तक कोई दवाई नहीं ली है। समय होने पर याद दिलाएंगे।`;
+        } else {
+          reply = `No ${h}, you have not taken any medicines yet today. Please wait for the reminder.`;
+        }
       }
 
       setAssistantMessage(reply);
-      // Play speech using Web Speech API fallback or text display
       if ("speechSynthesis" in window) {
         const u = new SpeechSynthesisUtterance(reply);
         window.speechSynthesis.speak(u);
@@ -277,6 +345,42 @@ export default function ElderView({ elder, onSwitchToCaregiver }) {
               ? "Listening... Tap to finish"
               : "Speak in Kannada, Hindi, Tamil, Telugu or English"}
           </p>
+        </div>
+
+        {/* ── 1-TAP TOUCH CONTROLS (DIRECT ALTERNATIVE TO PRESSING 1 OR 2 ON PHONE) ── */}
+        <div className="bg-white/80 p-4 rounded-3xl border border-slate-200 shadow-sm space-y-2">
+          <p className="text-xs font-black uppercase text-center text-slate-500 tracking-wider">
+            Or Press Below (No speaking needed)
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <button
+              onClick={handle1TapTaken}
+              disabled={isProcessing}
+              className="bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white p-3.5 rounded-2xl font-bold flex flex-col items-center justify-center gap-1 shadow-md border-2 border-emerald-700 transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-1.5">
+                <CheckCircle className="w-5 h-5" />
+                <span className="text-base font-black">[1] I Took It</span>
+              </div>
+              <span className="text-[11px] font-semibold text-emerald-100">
+                (ಹೌದು / అవును / हाँ)
+              </span>
+            </button>
+
+            <button
+              onClick={handle1TapSnooze}
+              disabled={isProcessing}
+              className="bg-amber-400 hover:bg-amber-500 active:scale-95 text-slate-950 p-3.5 rounded-2xl font-bold flex flex-col items-center justify-center gap-1 shadow-md border-2 border-amber-500 transition-all disabled:opacity-50"
+            >
+              <div className="flex items-center gap-1.5">
+                <Clock className="w-5 h-5 text-slate-900" />
+                <span className="text-base font-black">[2] Snooze 15m</span>
+              </div>
+              <span className="text-[11px] font-semibold text-slate-800">
+                (Remind me later)
+              </span>
+            </button>
+          </div>
         </div>
 
         {/* ── QUICK ACTION: DID I TAKE MY MEDICINES? ── */}

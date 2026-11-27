@@ -80,6 +80,7 @@ app.mount("/audio", StaticFiles(directory=str(AUDIO_CACHE_DIR)), name="audio")
 
 # ── Health Check ───────────────────────────────────────────────────────
 
+@app.get("/")
 @app.get("/health")
 async def health():
     return {"status": "ok", "service": "ArogyaVoice Backend"}

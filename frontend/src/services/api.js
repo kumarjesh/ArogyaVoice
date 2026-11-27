@@ -105,9 +105,23 @@ export async function getElderDoseCheck(elderId) {
 
 export async function elderVoiceChat(elderId, audioBlob) {
   const formData = new FormData();
-  formData.append("audio", audioBlob, "speech.wav");
+  const ext = audioBlob.type.includes("webm") ? "webm" : audioBlob.type.includes("ogg") ? "ogg" : "wav";
+  formData.append("audio", audioBlob, `speech.${ext}`);
   return request(`/elder/${elderId}/voice-chat`, {
     method: "POST",
     body: formData,
+  });
+}
+
+export async function confirmElderDose(elderId, medId = null) {
+  const q = medId ? `?med_id=${medId}` : "";
+  return request(`/elder/${elderId}/confirm-dose${q}`, {
+    method: "POST",
+  });
+}
+
+export async function snoozeElderDose(elderId, minutes = 15) {
+  return request(`/elder/${elderId}/snooze-dose?minutes=${minutes}`, {
+    method: "POST",
   });
 }

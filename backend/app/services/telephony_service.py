@@ -82,10 +82,12 @@ def build_play_and_gather(
     dtmf_timeout: int = 5,
     speech_timeout: str = "auto",
     num_digits: int = 1,
+    language: str = "kn-IN",
 ) -> str:
     """
     Build TwiML that plays audio and gathers DTMF + speech input.
     4-5 second silence timeout for elderly users.
+    language: BCP-47 language code for Twilio speech recognition (e.g. kn-IN, te-IN, hi-IN).
     """
     response = VoiceResponse()
     gather = Gather(
@@ -95,6 +97,7 @@ def build_play_and_gather(
         timeout=dtmf_timeout,
         speech_timeout=speech_timeout,
         num_digits=num_digits,
+        language=language,
     )
     gather.play(audio_url)
     response.append(gather)
@@ -114,6 +117,7 @@ def build_gather_after_play(
     audio_url: str,
     action_url: str,
     timeout: int = 5,
+    language: str = "kn-IN",
 ) -> str:
     """Play audio first, then wait for DTMF or speech."""
     response = VoiceResponse()
@@ -125,6 +129,7 @@ def build_gather_after_play(
         timeout=timeout,
         speech_timeout="auto",
         num_digits=1,
+        language=language,
     )
     response.append(gather)
     response.redirect(action_url, method="POST")
