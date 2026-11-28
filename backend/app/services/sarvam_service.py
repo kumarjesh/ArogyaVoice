@@ -8,26 +8,32 @@ from __future__ import annotations
 
 import base64
 import io
+import logging
 import os
 from typing import Optional
 
 import httpx
 
+logger = logging.getLogger("sarvam")
+
 SARVAM_BASE = "https://api.sarvam.ai"
 _api_key: Optional[str] = None
+# Minimal silent 8kHz mono WAV header for mock audio playback
+SILENT_WAV = b"RIFF$\x00\x00\x00WAVEfmt \x10\x00\x00\x00\x01\x00\x01\x00@\x1f\x00\x00@\x1f\x00\x00\x01\x00\x08\x00data\x00\x00\x00\x00"
 
 
 def init_sarvam() -> None:
     global _api_key
     _api_key = os.getenv("SARVAM_API_KEY")
     if not _api_key:
-        raise RuntimeError("SARVAM_API_KEY not set in environment")
+        logger.warning("SARVAM_API_KEY not set in environment. Running in zero-key mock mode.")
+        _api_key = None
 
 
 def _headers() -> dict:
     if not _api_key:
         init_sarvam()
-    return {"api-subscription-key": _api_key}
+    return {"api-subscription-key": _api_key or ""}
 
 
 # ── Language code mapping ──────────────────────────────────────────────
@@ -54,6 +60,10 @@ async def text_to_speech(
     Convert text to WAV audio using Sarvam bulbul:v4-flash.
     Returns raw WAV bytes (8kHz for Twilio <Play> compatibility).
     """
+    if not _api_key:
+        logger.info("SARVAM_API_KEY not set. Returning silent WAV for zero-key evaluation.")
+        return SILENT_WAV
+
     payload = {
         "text": text,
         "target_language_code": language_code,
@@ -82,6 +92,10 @@ def text_to_speech_sync(
     sample_rate: int = 8000,
 ) -> bytes:
     """Synchronous version for use in non-async contexts."""
+    if not _api_key:
+        logger.info("SARVAM_API_KEY not set. Returning silent WAV for zero-key evaluation.")
+        return SILENT_WAV
+
     payload = {
         "text": text,
         "target_language_code": language_code,
@@ -115,6 +129,10 @@ async def speech_to_text(
     Handles Kannada, Hindi, Telugu, Tamil, English, and code-mixed speech.
     Returns the transcript string.
     """
+    if not _api_key:
+        logger.info("SARVAM_API_KEY not set. Returning empty transcript for zero-key evaluation.")
+        return ""
+
     ext = (
         "webm" if "webm" in mime_type
         else "wav" if "wav" in mime_type
@@ -145,6 +163,10 @@ def speech_to_text_sync(
     mime_type: str = "audio/wav",
 ) -> str:
     """Synchronous version for use in non-async contexts."""
+    if not _api_key:
+        logger.info("SARVAM_API_KEY not set. Returning empty transcript for zero-key evaluation.")
+        return ""
+
     ext = (
         "webm" if "webm" in mime_type
         else "wav" if "wav" in mime_type

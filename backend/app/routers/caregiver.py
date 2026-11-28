@@ -34,7 +34,7 @@ async def create_elder(profile: ElderProfile):
 
 
 @router.get("/elders")
-async def list_elders(caregiver_uid: str = Query(...)):
+async def list_elders(caregiver_uid: str = Query("caregiver_demo_uid")):
     elders = fb.list_elders_for_caregiver(caregiver_uid)
     return [e.model_dump() for e in elders]
 

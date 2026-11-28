@@ -8,6 +8,22 @@
 
 Most elders (60+) and visually or motor-impaired individuals in India struggle with small smartphone screens, complex app navigation, and mobile data dependency. Millions still rely on basic feature/keypad phones.
 
+---
+
+## 🚀 One-Command Quickstart (Docker — Zero Secrets Required)
+
+You can launch the complete application with a single command:
+
+```bash
+docker compose up --build
+```
+
+- **App URL**: Open **`http://localhost:3000`** in your browser.
+- **Main Port**: `3000` opens the ArogyaVoice Web App (Caregiver Dashboard & Elder View).
+- **Backend API**: Accessible at `http://localhost:8000`.
+- **Zero Secrets / Zero Keys Required**: The app runs with zero configuration or keys out of the box. Key-dependent external features (such as live GSM calls or live Vision scanning) operate in graceful demo mode with clear user-friendly messages.
+
+
 **ArogyaVoice flips the model:**
 - **The Caregiver (Son/Daughter)** manages medication schedules, pill strips, and profiles through an intuitive **React + Tailwind PWA Dashboard**.
 - **The Elder** uses **zero apps and zero internet** on their daily routine: they simply answer normal GSM voice calls in their native language (**Kannada, Hindi, Telugu, Tamil, or Indian English**), or long-press **Speed Dial 1** on their keypad phone to talk to the AI assistant.

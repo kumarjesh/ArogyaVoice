@@ -12,6 +12,10 @@ export const API_BASE = (() => {
   ) {
     return RENDER_BACKEND_URL;
   }
+  // When running inside Docker container on port 3000, Nginx proxies /api and /elder
+  if (typeof window !== "undefined" && window.location.port === "3000") {
+    return "";
+  }
   return envUrl || "http://localhost:8000";
 })();
 

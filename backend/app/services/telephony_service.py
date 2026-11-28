@@ -5,11 +5,14 @@ Designed so Exotel can be swapped in later for Indian production.
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Optional
 
 from twilio.rest import Client as TwilioClient
 from twilio.twiml.voice_response import Dial, Gather, VoiceResponse
+
+logger = logging.getLogger("telephony")
 
 _client: Optional[TwilioClient] = None
 _from_number: Optional[str] = None
@@ -19,21 +22,29 @@ def init_telephony() -> None:
     global _client, _from_number
     sid = os.getenv("TWILIO_ACCOUNT_SID")
     token = os.getenv("TWILIO_AUTH_TOKEN")
-    _from_number = os.getenv("TWILIO_PHONE_NUMBER")
-    if not all([sid, token, _from_number]):
-        raise RuntimeError("Missing TWILIO_* variables in .env")
-    _client = TwilioClient(sid, token)
+    _from_number = os.getenv("TWILIO_PHONE_NUMBER") or "+15555555555"
+    if not sid or not token or "xxxx" in sid:
+        logger.warning("Missing or placeholder TWILIO_* variables. Outbound telephony calls will be simulated (zero-key mode).")
+        _client = None
+        return
+    try:
+        _client = TwilioClient(sid, token)
+    except Exception as e:
+        logger.warning(f"Failed to initialize Twilio client: {e}. Outbound calls will be simulated.")
+        _client = None
 
 
-def _get_client() -> TwilioClient:
-    if _client is None:
+def _get_client() -> Optional[TwilioClient]:
+    global _client
+    if _client is None and os.getenv("TWILIO_ACCOUNT_SID"):
         init_telephony()
     return _client
 
 
 def get_from_number() -> str:
+    global _from_number
     if _from_number is None:
-        init_telephony()
+        _from_number = os.getenv("TWILIO_PHONE_NUMBER") or "+15555555555"
     return _from_number
 
 
@@ -51,6 +62,10 @@ def make_call(
     Note: Twilio Trial accounts disallow status_callback parameters.
     """
     client = _get_client()
+    if client is None:
+        logger.info(f"[SIMULATED CALL] Outbound call to {to_number} (Zero-key evaluation mode). Webhook: {webhook_url}")
+        return "CA_SIMULATED_ZERO_KEY"
+
     kwargs = {
         "to": to_number,
         "from_": get_from_number(),

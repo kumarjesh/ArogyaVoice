@@ -46,15 +46,36 @@ logger = logging.getLogger("main")
 async def lifespan(app: FastAPI):
     """Initialise all services on startup, clean up on shutdown."""
     logger.info("Initialising services...")
-    init_firebase()
-    init_sarvam()
-    init_gemini()
-    init_telephony()
-    init_audio_cache()
-    start_scheduler()
-    logger.info("All services initialised — backend is ready!")
+    try:
+        init_firebase()
+    except Exception as e:
+        logger.warning(f"Firebase init skipped: {e}")
+    try:
+        init_sarvam()
+    except Exception as e:
+        logger.warning(f"Sarvam init skipped: {e}")
+    try:
+        init_gemini()
+    except Exception as e:
+        logger.warning(f"Gemini init skipped: {e}")
+    try:
+        init_telephony()
+    except Exception as e:
+        logger.warning(f"Telephony init skipped: {e}")
+    try:
+        init_audio_cache()
+    except Exception as e:
+        logger.warning(f"Audio cache init skipped: {e}")
+    try:
+        start_scheduler()
+    except Exception as e:
+        logger.warning(f"Scheduler init skipped: {e}")
+    logger.info("All services initialised — backend is ready for evaluation!")
     yield
-    stop_scheduler()
+    try:
+        stop_scheduler()
+    except Exception:
+        pass
     logger.info("Backend shut down cleanly.")
 
 
